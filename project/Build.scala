@@ -43,18 +43,20 @@ object ApplicationBuild extends Build {
     scalaVersion := appScalaVersion,
     crossScalaVersions := appScalaCrossVersions,
     resolvers += "Typesafe repository" at "http://repo.typesafe.com/typesafe/releases/",
-    libraryDependencies <+= scalaVersion(v => {
+    libraryDependencies <++= scalaVersion(v =>
       v match {
-        case "2.10.0" => "play" % "play_2.10" % "[2.1,)"
-        case "2.9.1" => "play" % "play_2.9.1" % "[2.0,)"
+        case "2.10.0" => Seq(
+          "play" % "play_2.10" % "[2.1,)" % "provided",
+          "com.twitter" % "util-eval_2.10" % "6.8.1",
+          "org.specs2" %% "specs2" % "1.14" % "test"
+        )
+        case "2.9.1" | "2.9.2" => Seq(
+          "play" % "play_2.9.1" % "[2.0,)" % "provided",
+          "com.twitter" % "util-eval_2.9.2" % "6.8.1",
+          "org.specs2" %% "specs2" % "1.12.3" % "test"
+        )
       }
-    }),
-    libraryDependencies <+= scalaVersion(v => {
-      v match {
-        case "2.10.0" => "org.specs2" %% "specs2" % "1.14" % "test"
-        case "2.9.1" => "org.specs2" %% "specs2" % "1.12.3" % "test"
-      }
-    }),
+    ),
     libraryDependencies ++= Seq(
       "org.apache.velocity" % "velocity" % "[1.7,)",
       "play" %% "play-test" % "[2.0,)" % "test",

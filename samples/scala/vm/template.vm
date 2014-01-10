@@ -6,6 +6,7 @@
     </head>
     <body>
 
+#*
 my name is ${name}<br />
 ${link}<br />
 ${link.getHoge()}<br />
@@ -21,6 +22,21 @@ ${i}<br />
 #foreach($u in $users)
   ${u.id()} / ${u.name()}<br />
 #end
+*#
+
+#*
+${strOpt.getOrElse("aaa")}<br />
+${intOpt.getOrElse(0)}<br />
+${longOpt.getOrElse(10)}<br />
+${longOpt.map(#func("_.toString"))}<br />
+*#
+
+#*
+#func("_ + 100L")
+longOpt: ${longOpt}<br />
+longOpt.map: ${longOpt.map($func1)}<br />
+*#
+longOpt.map: ${longOpt.map("_ + 100L")}<br />
 
     </body>
 </html>

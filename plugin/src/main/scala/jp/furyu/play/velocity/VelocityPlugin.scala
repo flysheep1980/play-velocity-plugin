@@ -21,23 +21,22 @@
  */
 package jp.furyu.play.velocity
 
-import java.io.StringWriter
+import java.io.{ Writer, StringWriter }
 import java.util.{ Iterator => JavaIterator, Properties }
 
 import org.apache.velocity.app.VelocityEngine
 import org.apache.velocity.runtime.log.Log
-import org.apache.velocity.runtime.parser.node.MapGetExecutor
-import org.apache.velocity.runtime.parser.node.PropertyExecutor
-import org.apache.velocity.util.introspection.UberspectImpl.VelGetterImpl
-import org.apache.velocity.util.introspection.Info
-import org.apache.velocity.util.introspection.Introspector
-import org.apache.velocity.util.introspection.UberspectImpl
-import org.apache.velocity.util.introspection.VelPropertyGet
+import org.apache.velocity.runtime.parser.node.{ Node, MapGetExecutor, PropertyExecutor }
+import org.apache.velocity.util.introspection.UberspectImpl.{ VelMethodImpl, VelGetterImpl }
+import org.apache.velocity.util.introspection._
 import org.apache.velocity.VelocityContext
 
 import play.api.templates.Html
 import play.api.Application
 import play.api.Plugin
+import org.apache.velocity.runtime.directive.{ DirectiveConstants, Directive }
+import org.apache.velocity.context.InternalContextAdapter
+import org.apache.velocity.exception.VelocityException
 
 /**
  * Velocity Plugin for Play2!
@@ -147,6 +146,57 @@ class ScalaUberspect extends UberspectImpl {
       null
     }
   }
+
+  override def getMethod(obj: scala.Any, methodName: String, args: Array[AnyRef], i: Info): VelMethod = {
+    println("called getMethod. obj: [%s], methodName: [%s], args: [%s], info: [%s]".format(obj, methodName, args, i))
+
+    val ret = super.getMethod(obj, methodName, args, i)
+    if (ret == null) {
+      obj match {
+        case opt: Option[_] if methodName == "getOrElse" => {
+          val method = obj.getClass.getMethods.find(_.getName == "getOrElse").head
+
+          new VelMethodImpl(method) {
+            override def invoke(o: scala.Any, actual: Array[AnyRef]): AnyRef = {
+              val newActual = actual.map { act =>
+                new Function0[AnyRef] {
+                  def apply(): AnyRef = act
+                }.asInstanceOf[AnyRef]
+              }
+              super.invoke(o, newActual)
+            }
+          }
+        }
+        case opt: Option[_] if methodName == "map" => {
+          val method = obj.getClass.getMethods.find(_.getName == "map").head
+
+          method.getParameterTypes.foreach { parameterType =>
+            println("parameterType: [%s]".format(parameterType.getName))
+          }
+
+          def convertFunc(arg: AnyRef) = {
+            val str = "val v: Long => Long = { %s };v".format(arg.toString)
+            println("str: [%s]".format(str))
+            new com.twitter.util.Eval().apply[Long => Long](str)
+            //            new com.twitter.util.Eval().apply[Long => Long]("""{ %s }""".format(arg.toString))
+          }
+
+          new VelMethodImpl(method) {
+            override def invoke(o: scala.Any, actual: Array[AnyRef]): AnyRef = {
+              val newActual = actual.map { act =>
+                convertFunc(act).asInstanceOf[AnyRef]
+              }
+              super.invoke(o, newActual)
+            }
+          }
+        }
+        case _ => null
+      }
+    } else {
+      ret
+    }
+  }
+
 }
 object ScalaUberspect {
 
@@ -164,4 +214,48 @@ object ScalaUberspect {
     override def execute(o: AnyRef) = o.asInstanceOf[Map[String, AnyRef]].getOrElse[AnyRef](property, null).asInstanceOf[java.lang.Object]
   }
 
+}
+
+class ScalaFunctionDirective extends Directive {
+  // http://www.sergiy.ca/how-to-create-custom-directives-for-apache-velocity/
+  def getName: String = "func"
+  def getType: Int = DirectiveConstants.LINE
+  def render(context: InternalContextAdapter, writer: Writer, node: Node): Boolean = {
+    if (node.jjtGetNumChildren() != 1) {
+      throw new VelocityException("#func(): argument size must be one at " + Log.formatFileString(this))
+    }
+
+    val value = node.jjtGetChild(0).value(context)
+    if (rsvc.getLog().isDebugEnabled()) {
+      rsvc.getLog().debug("#func(): argument at " + Log.formatFileString(this))
+    }
+    println("value: [%s]".format(value))
+
+    val a: AnyRef => AnyRef = { _.toString }
+    //    new Function1[AnyRef, AnyRef] {
+    //      def apply(v1: AnyRef): AnyRef = { _.toString }
+    //    }
+
+    val str = "val v: AnyRef => AnyRef = { %s };v".format(value.toString)
+    println("str: [%s]".format(str))
+    val v = new com.twitter.util.Eval().apply[AnyRef => AnyRef](str)
+    //    val v = new com.twitter.util.Eval().apply[Function[AnyRef, AnyRef]]("{ s => s.toString }")
+    //    val v = new com.twitter.util.Eval().apply[Function[AnyRef, AnyRef]]("{ _.toString }")
+    val ret = v.apply("10")
+    println("ret: [%s]".format(ret))
+
+    context.put("func1", v)
+
+    /*
+     longOpt : Some(10L)
+     longOpt.map(_.toString).getOrElse("hoge")
+       -> "10" or "hoge"
+
+     Long => String
+
+
+     */
+
+    true
+  }
 }

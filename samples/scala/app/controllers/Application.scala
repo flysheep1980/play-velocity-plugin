@@ -27,12 +27,18 @@ import jp.furyu.play.velocity.mvc.VM
 object Application extends Controller {
 
   def index = Action {
+    val strOpt = Some("hogehoge")
+
     val args = Map(
       "name" -> "hoge",
       "link" -> new LinkTool,
       "user" -> User(100L, "__name__"),
       "users" -> (1 to 10).map { i => User(i, "__name%d__".format(i)) },
-      "i" -> 1)
+      "i" -> 1,
+      "strOpt" -> strOpt,
+      "intOpt" -> None,
+      "longOpt" -> Some(1L)
+    )
 
     Ok(VM("vm/template.vm", args))
   }
